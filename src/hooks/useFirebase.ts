@@ -139,31 +139,34 @@ export const useFirebase = () => {
     try {
       console.log('🔄 Tentando atualizar entrada:', entryId, updates);
       
-      // Primeiro, vamos verificar se o documento existe listando todos os documentos
-      const logEntriesRef = collection(db, 'logEntries');
-      const snapshot = await getDocs(logEntriesRef);
-      
-      let foundEntry = null;
-      snapshot.forEach((doc) => {
-        if (doc.id === entryId) {
-          foundEntry = { id: doc.id, ...doc.data() };
-        }
-      });
+      // Verificar se o documento existe
+      const entryRef = doc(db, 'logEntries', entryId);
+      const entrySnap = await getDoc(entryRef);
 
-      console.log('🔍 Entrada encontrada:', foundEntry);
-
-      if (!foundEntry) {
-        console.error('❌ Entrada não encontrada na coleção. IDs disponíveis:');
+      if (!entrySnap.exists()) {
+        console.error('❌ Documento não encontrado:', entryId);
+        
+        // Listar todos os documentos para debug
+        const logEntriesRef = collection(db, 'logEntries');
+        const snapshot = await getDocs(logEntriesRef);
+        
+        console.log('📋 IDs disponíveis na coleção:');
+        const availableIds: string[] = [];
         snapshot.forEach((doc) => {
+          availableIds.push(doc.id);
           console.log('  -', doc.id);
         });
-        throw new Error('Entrada não encontrada no banco de dados');
+        
+        throw new Error(`Entrada não encontrada. ID: ${entryId} não existe na coleção.`);
       }
 
-      // Verificar permissões - admin pode editar tudo, logger pode editar suas próprias entradas
+      const entryData = entrySnap.data();
+      console.log('🔍 Dados da entrada encontrada:', entryData);
+
+      // Verificar permissões
       const canEdit = currentUser.role === 'admin' || 
                      currentUser.role === 'logger' || 
-                     foundEntry.createdBy === currentUser.uid;
+                     entryData.createdBy === currentUser.uid;
 
       if (!canEdit) {
         throw new Error('Sem permissão para editar esta entrada');
@@ -176,10 +179,9 @@ export const useFirebase = () => {
         updatedBy: currentUser.uid
       };
 
-      console.log('💾 Dados para atualização:', updateData);
+      console.log('💾 Atualizando com dados:', updateData);
 
       // Atualizar o documento
-      const entryRef = doc(db, 'logEntries', entryId);
       await updateDoc(entryRef, updateData);
 
       console.log('✅ Entrada atualizada com sucesso');
@@ -219,11 +221,12 @@ export const useFirebase = () => {
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const dataArray: T[] = [];
         snapshot.forEach((doc) => {
+          const docData = doc.data();
           dataArray.push({
-            id: doc.id,
-            ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-            updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+            id: doc.id, // Usar o ID real do documento do Firestore
+            ...docData,
+            createdAt: docData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            updatedAt: docData.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
           } as T);
         });
         setData(dataArray);
