@@ -71,6 +71,7 @@ const ActivityFeed: React.FC = () => {
   };
 
   const handleEditEntry = (entryId: string, currentNotes: string) => {
+    console.log('🔧 Iniciando edição da entrada:', entryId);
     setEditingEntry(entryId);
     setEditNotes(currentNotes);
     setError(null);
@@ -90,6 +91,7 @@ const ActivityFeed: React.FC = () => {
     
     try {
       console.log('🔄 Iniciando atualização da entrada:', entryId);
+      console.log('📝 Novas notas:', trimmedNotes);
       
       await updateLogEntry(entryId, {
         notes: trimmedNotes

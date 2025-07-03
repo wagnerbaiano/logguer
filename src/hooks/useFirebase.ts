@@ -17,7 +17,8 @@ import {
   orderBy,
   serverTimestamp,
   updateDoc,
-  writeBatch
+  writeBatch,
+  getDocs
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { User, LogEntry, Participant, Location, ActionCategory, Tag } from '../types';
@@ -138,21 +139,31 @@ export const useFirebase = () => {
     try {
       console.log('🔄 Tentando atualizar entrada:', entryId, updates);
       
-      // Verificar se o documento existe primeiro
-      const entryRef = doc(db, 'logEntries', entryId);
-      const entrySnap = await getDoc(entryRef);
+      // Primeiro, vamos verificar se o documento existe listando todos os documentos
+      const logEntriesRef = collection(db, 'logEntries');
+      const snapshot = await getDocs(logEntriesRef);
       
-      if (!entrySnap.exists()) {
-        throw new Error('Entrada não encontrada');
-      }
+      let foundEntry = null;
+      snapshot.forEach((doc) => {
+        if (doc.id === entryId) {
+          foundEntry = { id: doc.id, ...doc.data() };
+        }
+      });
 
-      const entryData = entrySnap.data();
-      console.log('📄 Dados atuais da entrada:', entryData);
+      console.log('🔍 Entrada encontrada:', foundEntry);
+
+      if (!foundEntry) {
+        console.error('❌ Entrada não encontrada na coleção. IDs disponíveis:');
+        snapshot.forEach((doc) => {
+          console.log('  -', doc.id);
+        });
+        throw new Error('Entrada não encontrada no banco de dados');
+      }
 
       // Verificar permissões - admin pode editar tudo, logger pode editar suas próprias entradas
       const canEdit = currentUser.role === 'admin' || 
                      currentUser.role === 'logger' || 
-                     entryData.createdBy === currentUser.uid;
+                     foundEntry.createdBy === currentUser.uid;
 
       if (!canEdit) {
         throw new Error('Sem permissão para editar esta entrada');
@@ -167,10 +178,9 @@ export const useFirebase = () => {
 
       console.log('💾 Dados para atualização:', updateData);
 
-      // Tentar atualizar usando batch para garantir atomicidade
-      const batch = writeBatch(db);
-      batch.update(entryRef, updateData);
-      await batch.commit();
+      // Atualizar o documento
+      const entryRef = doc(db, 'logEntries', entryId);
+      await updateDoc(entryRef, updateData);
 
       console.log('✅ Entrada atualizada com sucesso');
       return true;
